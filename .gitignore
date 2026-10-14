@@ -23,6 +23,15 @@ local.properties
 
 # Keystore files
 *.jks
+*.keystore
+
+# Local HS5 diagnostics, personal backups and release artifacts
+/private/
+/research/
+/dist/
+hs5-readings.jsonl
+hs5-packets.jsonl
+openscale_backup_*.zip
 
 # Google Services (e.g. APIs or Firebase)
 google-services.json

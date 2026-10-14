@@ -1,3 +1,20 @@
+# openScale with iHealth HS5 Wi-Fi support
+
+This custom Android build adds HS5 Bluetooth Wi-Fi provisioning and local Wi-Fi
+measurement sync. Stored-measurement sync has been tested with a real HS5;
+live measurement is experimental. It has one openScale launcher icon.
+
+- [Download the HS5 APK](https://github.com/marmoure/openscale-hs5/releases)
+- [Install on another phone and transfer measurements](docs/scales/hs5-installation.md)
+- [HS5 measurement usage and validation](docs/scales/hs5-measurements.md)
+- [HS5 Wi-Fi provisioning](docs/scales/hs5-setup.md)
+
+Requires Android 12 or newer. Source and releases contain no personal measurement
+database, Wi-Fi credentials, or signing keys. The original openScale project and
+its GPL-3.0-or-later licensing are retained below.
+
+---
+
 &nbsp; <img src="https://github.com/oliexdev/openScale/blob/master/fastlane/metadata/android/en-GB/images/icon.png" alt="openScale logo" height="60"/> &nbsp;openScale [![CI](https://github.com/oliexdev/openScale/actions/workflows/ci_master.yml/badge.svg)](https://github.com/oliexdev/openScale/actions/workflows/ci_master.yml)
 [![Translation status](https://hosted.weblate.org/widgets/openscale/-/strings/svg-badge.svg)](https://hosted.weblate.org/engage/openscale/?utm_source=widget)
 =========

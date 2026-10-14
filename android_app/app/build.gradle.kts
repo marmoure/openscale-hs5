@@ -98,8 +98,9 @@ android {
         }
 
         debug {
-            applicationIdSuffix = ".debug"
-            versionNameSuffix = "-debug"
+            applicationIdSuffix = ".hs5test"
+            versionNameSuffix = "-hs5-experimental"
+            manifestPlaceholders["appName"] = "openScale HS5 test"
             manifestPlaceholders["appIcon"] = "@mipmap/ic_launcher_dev"
             manifestPlaceholders["appRoundIcon"] = "@mipmap/ic_launcher_dev_round"
         }
