@@ -3,6 +3,33 @@
 Open **openScale → Settings → HS5 Wi-Fi setup → Collect HS5 measurements over Wi-Fi**.
 There is one launcher icon; both HS5 screens are accessed inside openScale.
 
+## Automatic collection
+
+The automatic-sync build checks for your linked HS5 whenever the main openScale
+screen comes to the foreground, then checks again 20 seconds after each attempt
+while you keep the app open. Weigh yourself, open openScale on the same Wi-Fi,
+and keep the scale awake until the new reading appears. Opening the app before
+weighing also allows a later check to collect the completed reading. A sleeping
+scale cannot be woken by this connector.
+
+**Sync automatically while openScale is open** is enabled by default in the HS5
+measurement screen. Existing installations with one linked user use that link.
+If several users are linked, select your user and choose **Connect my scale
+profile** to select the automatic-sync owner. Deleted or ambiguous users are
+never guessed. The connector remembers the scale identity and rediscovers its
+address on the local Wi-Fi if its address changes.
+
+Automatic collection pauses when you leave openScale, lock the phone, or open
+the HS5 manual screens. Return to the main openScale screen to resume it. New
+records use the same verified database/journal path as manual sync; duplicate
+records are skipped. A brief message confirms new saves. The HS5 screen shows
+the last automatic-check status and time, and retains the manual controls below.
+
+This collects completed stored readings. The live weight/composition stream
+remains experimental; interim values are never saved as completed readings.
+
+## Manual collection and initial linking
+
 1. Connect the phone to the same local Wi-Fi network as the scale.
 2. Tap the scale awake; wait for `0.0` and a steady Wi-Fi symbol. Do not enter SET.
 3. Choose the openScale user and tap **Find scale on Wi-Fi**. If the router blocks
@@ -50,8 +77,24 @@ There is one launcher icon; both HS5 screens are accessed inside openScale.
 
 ## Validation and current limits — 2026-10-14
 
-All 16 HS5 JVM tests pass (6 Bluetooth setup tests and 10 Wi-Fi protocol tests).
-The tests cover fixed command vectors, checksums, payload boundaries, packed
+The automatic-sync update compiles and packages successfully using the SDK build
+path below. All **27 HS5 JVM tests pass**, including seven foreground lifecycle
+tests (cancellation, reopen races, retries and non-overlapping scheduling) and
+four profile-selection tests. Its APK has the same package and signing
+certificate as the installed build, and its manifest includes the internal
+lifecycle initializer. It was subsequently installed over the existing app on
+the Samsung SM-A566E. The app launched successfully, and automatic foreground
+checks ran and reported waiting for the scale. A local backup was taken first;
+all database records were unchanged after installation/startup, and SQLite's
+integrity check passed. **Automatic measurement transfer was then verified on
+the owner's scale:** after it was woken, a foreground retry imported new stored
+readings and confirmed each save through the normal database readback, without
+pressing the manual sync button. An initial scale error was followed by a
+successful automatic retry. The earlier hardware results below also validate
+the manual collection path.
+
+The original 16 protocol tests (6 Bluetooth setup tests and 10 Wi-Fi tests)
+cover fixed command vectors, checksums, payload boundaries, packed
 dates and metric units, malformed records, user identifiers and a cipher vector
 independently obtained from the vendor's pure Java XXTEA implementation, plus
 the observed padded history format and rejection of truncated history records.

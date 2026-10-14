@@ -14,6 +14,20 @@
 The APK includes the application, not anyone's measurements. The checksum file
 in the same release identifies the exact APK that was tested.
 
+## Automatic-sync builds
+
+Builds marked `hs5-auto-sync` collect stored readings when you open openScale,
+then check again 20 seconds after each attempt while the main app stays open.
+Keep the scale awake and your phone on the same Wi-Fi. The switch and last-check
+status are under **Settings → HS5 Wi-Fi setup → Collect HS5 measurements over
+Wi-Fi**. Return to the main app to resume automatic collection after using the
+manual controls. See [measurement usage and validation](hs5-measurements.md).
+
+Install an automatic-sync APK over the existing **openScale HS5 test** using
+Android's **Update** action. Do not uninstall the existing app: an in-place
+update preserves its measurements and scale/profile link. The tested update
+uses the same package and signing certificate as the original HS5 build.
+
 ## Keep existing measurements when changing phones
 
 1. On the old phone, open **Settings → Data Management → Backup database**.

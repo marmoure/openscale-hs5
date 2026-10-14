@@ -56,6 +56,10 @@
         </activity>
 
         <provider
+            android:name=".hs5.Hs5AutoSyncProvider"
+            android:authorities="${applicationId}.hs5-autosync"
+            android:exported="false" />
+        <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.file_provider"
             android:exported="false"

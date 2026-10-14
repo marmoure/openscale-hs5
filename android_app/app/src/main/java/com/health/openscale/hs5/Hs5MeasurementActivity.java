@@ -3,10 +3,8 @@ package com.health.openscale.hs5;
 
 import android.app.Activity;
 import android.app.AlertDialog;
-import android.content.ContentValues;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.database.Cursor;
 import android.net.*;
 import android.net.wifi.WifiManager;
 import android.os.Bundle;
@@ -16,14 +14,6 @@ import android.view.WindowManager;
 import android.widget.*;
 import com.health.openscale.core.data.User;
 import com.health.openscale.core.data.GenderType;
-import com.health.openscale.core.database.DatabaseProviderEntryPoint;
-import com.health.openscale.core.database.DatabaseRepository;
-import dagger.hilt.android.EntryPointAccessors;
-import kotlin.coroutines.EmptyCoroutineContext;
-import kotlinx.coroutines.BuildersKt;
-import kotlinx.coroutines.flow.FlowKt;
-import org.json.JSONArray;
-import org.json.JSONObject;
 import java.io.*;
 import java.net.*;
 import java.security.SecureRandom;
@@ -45,7 +35,7 @@ public final class Hs5MeasurementActivity extends Activity {
     private volatile boolean canceled;
     private boolean running;
     private SharedPreferences preferences;
-    private DatabaseRepository repository;
+    private Hs5MeasurementStore store;
     private interface Work { void run() throws Exception; }
 
     @Override public void onCreate(Bundle saved) {
@@ -57,8 +47,19 @@ public final class Hs5MeasurementActivity extends Activity {
         body.setPadding(pad, pad, pad, pad); scroll.addView(body); setContentView(scroll);
         TextView title = new TextView(this); title.setText("HS5 measurements"); title.setTextSize(24); body.addView(title);
         TextView intro = new TextView(this);
-        intro.setText("Use the same Wi-Fi as the scale. After linking your profile, weigh yourself barefoot, then tap Sync stored measurements while the scale is awake. Keep this screen open until the save is confirmed.");
+        intro.setText("Use the same Wi-Fi as the scale. After linking your profile, open openScale after weighing to sync automatically. Keep the scale awake and the app open until your reading appears. You can also sync manually here.");
         body.addView(intro);
+        Switch automatic = new Switch(this);
+        automatic.setText("Sync automatically while openScale is open");
+        automatic.setChecked(preferences.getBoolean("auto_sync", true));
+        automatic.setOnCheckedChangeListener((button, enabled) -> preferences.edit().putBoolean("auto_sync", enabled).apply());
+        body.addView(automatic);
+        TextView automaticStatus = new TextView(this);
+        String last = preferences.getString("auto_last_status", "Automatic sync starts when you return to openScale.");
+        long attempted = preferences.getLong("auto_last_attempt", 0);
+        automaticStatus.setText(attempted == 0 ? last : "Last automatic check ("
+                + java.text.DateFormat.getDateTimeInstance().format(new Date(attempted)) + "): " + last);
+        body.addView(automaticStatus);
         userChoice = new Spinner(this); body.addView(userChoice);
         deviceChoice = new Spinner(this); body.addView(deviceChoice);
         action(body, "Find scale on Wi-Fi", () -> runTask(this::discover));
@@ -72,9 +73,8 @@ public final class Hs5MeasurementActivity extends Activity {
         action(body, "Open measurements", () -> startActivity(new Intent().setClassName(this, "com.health.openscale.MainActivity")));
         output = new TextView(this); output.setTextIsSelectable(true); body.addView(output);
         runTask(() -> {
-            repository = EntryPointAccessors.fromApplication(getApplicationContext(), DatabaseProviderEntryPoint.class).databaseRepository();
-            List<User> loaded = BuildersKt.runBlocking(EmptyCoroutineContext.INSTANCE,
-                    (scope, continuation) -> FlowKt.first(repository.getAllUsers(), continuation));
+            store = new Hs5MeasurementStore(this);
+            List<User> loaded = store.users();
             main.post(() -> {
                 users.clear(); users.addAll(loaded);
                 List<String> labels = new ArrayList<>(); for (User u : users) labels.add(u.getName());
@@ -133,7 +133,9 @@ public final class Hs5MeasurementActivity extends Activity {
                 public void status(String text) { Hs5MeasurementActivity.this.status(text); }
                 public void reading(Hs5WifiProtocol.Reading reading) throws IOException {
                     if (user == null) throw new IOException("No selected openScale user");
-                    save(user, reading);
+                    boolean saved = store.save(user, reading);
+                    status(saved ? "Saved " + reading.weight + " kg to " + user.getName() + " in openScale."
+                            : "Reading already saved; duplicate skipped.");
                 }
             });
             active = result;
@@ -209,7 +211,7 @@ public final class Hs5MeasurementActivity extends Activity {
     private String binding(Hs5WifiClient.Device device, User user) { return device.mac + ".user." + user.getId(); }
     private void remember(Hs5WifiClient.Device device, User user, int id) {
         preferences.edit().putString("device_mac", device.mac).putString("device_ip", device.ip.getHostAddress())
-                .putInt(binding(device, user), id).apply();
+                .putInt(binding(device, user), id).putInt("auto_user_id", user.getId()).apply();
     }
     private void chooseProfile() {
         User user = selectedUser(); Hs5WifiClient.Device device = selectedDevice(); if (user == null || device == null) return;
@@ -219,6 +221,7 @@ public final class Hs5MeasurementActivity extends Activity {
                 int[] ids = client.connect(device);
                 int bound = preferences.getInt(binding(device, user), -1);
                 for (int i = 0; i < ids.length; i++) if (bound != -1 && ids[i] == bound) {
+                    remember(device, user, bound);
                     status("Connected to scale user " + (i + 1) + " for " + user.getName() + ". Ready to measure or sync."); return;
                 }
                 List<String> labels = new ArrayList<>(); List<Integer> slots = new ArrayList<>();
@@ -276,47 +279,6 @@ public final class Hs5MeasurementActivity extends Activity {
                 if (history) client.history(slot, id); else client.measure(slot, id);
             } finally { lock.release(); }
         });
-    }
-    private int existing(Uri uri, long timestamp, float weight) throws Exception {
-        try (Cursor c = getContentResolver().query(uri, new String[]{"_ID", "datetime", "values_json"}, null, null, null)) {
-            if (c == null) throw new IOException("Cannot verify openScale storage");
-            while (c.moveToNext()) if (c.getLong(1) == timestamp) {
-                JSONArray values = new JSONArray(c.getString(2));
-                for (int i = 0; i < values.length(); i++) {
-                    JSONObject value = values.getJSONObject(i);
-                    if ("builtin.weight".equals(value.optString("identity")) && Math.abs(value.getDouble("value") - weight) < 0.05) return c.getInt(0);
-                }
-                throw new IOException("A different measurement already exists at this timestamp; HS5 record kept in local journal.");
-            }
-        }
-        return -1;
-    }
-    private void save(User user, Hs5WifiProtocol.Reading reading) throws IOException {
-        try {
-            JSONObject journal = new JSONObject().put("userId", user.getId()).put("timestamp", reading.timestamp)
-                    .put("weightKg", reading.weight).put("bodyFatPercent", reading.fat).put("waterPercent", reading.water)
-                    .put("muscleKg", reading.muscleKg).put("boneKg", reading.boneKg)
-                    .put("visceralFat", reading.visceralFat).put("dailyCalories", reading.dailyCalories);
-            try (FileOutputStream out = openFileOutput("hs5-readings.jsonl", MODE_APPEND)) {
-                out.write((journal + "\n").getBytes(java.nio.charset.StandardCharsets.UTF_8)); out.getFD().sync();
-            }
-            Uri uri = Uri.parse("content://" + getPackageName() + ".provider/measurements/" + user.getId());
-            if (existing(uri, reading.timestamp, reading.weight) > 0) { status("Reading already saved; duplicate skipped."); return; }
-            ContentValues values = new ContentValues(); values.put("datetime", reading.timestamp); values.put("weight", reading.weight);
-            if (reading.fat > 0) values.put("fat", reading.fat);
-            if (reading.water > 0) values.put("water", reading.water);
-            if (reading.muscleKg > 0) values.put("muscle", reading.muscleKg / reading.weight * 100f);
-            JSONArray extra = new JSONArray();
-            if (reading.boneKg > 0) extra.put(new JSONObject().put("identity", "builtin.bone").put("value", reading.boneKg));
-            if (reading.visceralFat > 0) extra.put(new JSONObject().put("identity", "builtin.visceral_fat").put("value", reading.visceralFat));
-            values.put("values_json", extra.toString());
-            getContentResolver().insert(uri, values);
-            int measurementId = existing(uri, reading.timestamp, reading.weight);
-            if (measurementId < 0) throw new IOException("openScale did not confirm saving; record kept in local journal.");
-            BuildersKt.runBlocking(EmptyCoroutineContext.INSTANCE,
-                    (scope, continuation) -> repository.recalculateDerivedValuesForMeasurement(measurementId, continuation));
-            status("Saved " + reading.weight + " kg to " + user.getName() + " in openScale.");
-        } catch (Exception error) { throw new IOException("Unable to save HS5 reading: " + error.getMessage(), error); }
     }
     @Override protected void onDestroy() {
         canceled = true; Hs5WifiClient client = active; if (client != null) client.close();

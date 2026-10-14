@@ -41,6 +41,15 @@ public final class Hs5WifiClient implements Closeable {
     }
 
     public List<Device> discover(List<InetAddress> broadcasts, int seconds) throws IOException {
+        return discover(broadcasts, seconds, null);
+    }
+    /** Stop as soon as our remembered scale replies, even if its IP has changed. */
+    public Device discoverKnown(List<InetAddress> addresses, int seconds, String mac) throws IOException {
+        List<Device> found = discover(addresses, seconds, mac);
+        for (Device device : found) if (device.mac.equals(mac)) return device;
+        return null;
+    }
+    private List<Device> discover(List<InetAddress> broadcasts, int seconds, String wantedMac) throws IOException {
         Map<String, Device> devices = new LinkedHashMap<>();
         long end = now() + seconds * 1000L, next = 0;
         while (now() < end) {
@@ -55,6 +64,7 @@ public final class Hs5WifiClient implements Closeable {
                 Device found = new Device(packet.getAddress(), frame.address());
                 if (!devices.containsKey(found.mac)) listener.status("Found " + found);
                 devices.put(found.mac, found);
+                if (found.mac.equals(wantedMac)) break;
             }
         }
         return new ArrayList<>(devices.values());
